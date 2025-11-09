@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useClearLocalStorage } from '../hooks/useLocalStorage';
 
 interface StorageInfo {
@@ -7,21 +7,23 @@ interface StorageInfo {
     itemCount: number;
 }
 
+const STORAGE_KEYS = [
+    'vida-irresistible-tasks',
+    'vida-irresistible-completed-tasks',
+    'vida-irresistible-daily-plan',
+    'vida-irresistible-mentors',
+    'vida-irresistible-missions',
+    'vida-irresistible-journal',
+    'vida-irresistible-life-area-stats'
+];
+
 const StorageManager: React.FC = () => {
     const { clearKey, clearAll } = useClearLocalStorage();
     const [showManager, setShowManager] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
 
     const getStorageInfo = (): StorageInfo[] => {
-        const storageKeys = [
-            'vida-irresistible-tasks',
-            'vida-irresistible-completed-tasks',
-            'vida-irresistible-daily-plan',
-            'vida-irresistible-mentors',
-            'vida-irresistible-missions',
-            'vida-irresistible-journal',
-            'vida-irresistible-life-area-stats'
-        ];
-
+        const storageKeys = STORAGE_KEYS;
         return storageKeys.map(key => {
             const data = localStorage.getItem(key);
             const size = data ? `${(data.length / 1024).toFixed(2)} KB` : '0 KB';
@@ -51,6 +53,77 @@ const StorageManager: React.FC = () => {
         if (window.confirm(`¿Estás seguro de que quieres borrar los datos de "${key}"?`)) {
             clearKey(key);
             window.location.reload();
+        }
+    };
+
+    // Exportar datos a un archivo JSON
+    const handleExport = () => {
+        try {
+            const backup: any = {
+                version: '1.0',
+                exportedAt: new Date().toISOString(),
+                data: {}
+            };
+    
+            STORAGE_KEYS.forEach(key => {
+                const raw = localStorage.getItem(key);
+                if (raw !== null) {
+                    try {
+                        backup.data[key] = JSON.parse(raw);
+                    } catch {
+                        backup.data[key] = raw;
+                    }
+                }
+            });
+    
+            const json = JSON.stringify(backup, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
+            const filename = `vida-irresistible-backup-${stamp}.json`;
+            const url = URL.createObjectURL(blob);
+    
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        } catch (e: any) {
+            alert('Error creando el backup: ' + (e?.message || 'desconocido'));
+        }
+    };
+    
+    // Importar datos desde un archivo JSON
+    const triggerImport = () => {
+        if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+            fileInputRef.current.click();
+        }
+    };
+    
+    const handleFileSelected: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+            const text = await file.text();
+            const json = JSON.parse(text);
+            if (!json || typeof json !== 'object' || !json.data || typeof json.data !== 'object') {
+                alert('Archivo de backup inválido.');
+                return;
+            }
+            let applied = 0;
+            for (const key of Object.keys(json.data)) {
+                if (STORAGE_KEYS.includes(key)) {
+                    localStorage.setItem(key, JSON.stringify(json.data[key]));
+                    applied++;
+                }
+            }
+            alert(`Restauración completada. Claves aplicadas: ${applied}.`);
+            window.location.reload();
+        } catch (err: any) {
+            console.error(err);
+            alert('Error al importar el backup: ' + (err?.message || 'desconocido'));
         }
     };
 
@@ -111,6 +184,28 @@ const StorageManager: React.FC = () => {
                         </div>
                     ))}
                 </div>
+
+                <div className="flex gap-2">
+                    <button
+                        onClick={handleExport}
+                        className="flex-1 bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition-colors"
+                    >
+                        Exportar (JSON)
+                    </button>
+                    <button
+                        onClick={triggerImport}
+                        className="flex-1 bg-green-600 text-white py-2 px-4 rounded hover:bg-green-700 transition-colors"
+                    >
+                        Importar (JSON)
+                    </button>
+                </div>
+                <input
+                    type="file"
+                    accept="application/json"
+                    ref={fileInputRef}
+                    onChange={handleFileSelected}
+                    className="hidden"
+                />
 
                 <div className="flex gap-2">
                     <button
