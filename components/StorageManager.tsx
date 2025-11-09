@@ -1,5 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useClearLocalStorage } from '../hooks/useLocalStorage';
+import { MENTORS_DATA } from '../constants';
+import { LifeArea } from '../types';
 
 interface StorageInfo {
     key: string;
@@ -16,6 +18,17 @@ const STORAGE_KEYS = [
     'vida-irresistible-journal',
     'vida-irresistible-life-area-stats'
 ];
+
+// Valores por defecto para exportar cuando no existan entradas en localStorage
+const DEFAULT_VALUES: Record<string, any> = {
+    'vida-irresistible-tasks': [],
+    'vida-irresistible-completed-tasks': [],
+    'vida-irresistible-daily-plan': [],
+    'vida-irresistible-mentors': MENTORS_DATA,
+    'vida-irresistible-missions': [],
+    'vida-irresistible-journal': [],
+    'vida-irresistible-life-area-stats': Object.values(LifeArea).map(area => ({ area, xp: 0, level: 1 }))
+};
 
 const StorageManager: React.FC = () => {
     const { clearKey, clearAll } = useClearLocalStorage();
@@ -64,7 +77,7 @@ const StorageManager: React.FC = () => {
                 exportedAt: new Date().toISOString(),
                 data: {}
             };
-    
+
             STORAGE_KEYS.forEach(key => {
                 const raw = localStorage.getItem(key);
                 if (raw !== null) {
@@ -73,15 +86,20 @@ const StorageManager: React.FC = () => {
                     } catch {
                         backup.data[key] = raw;
                     }
+                } else {
+                    // Si no hay valor en localStorage, exportamos el valor por defecto
+                    if (key in DEFAULT_VALUES) {
+                        backup.data[key] = DEFAULT_VALUES[key];
+                    }
                 }
             });
-    
+
             const json = JSON.stringify(backup, null, 2);
             const blob = new Blob([json], { type: 'application/json' });
             const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
             const filename = `vida-irresistible-backup-${stamp}.json`;
             const url = URL.createObjectURL(blob);
-    
+
             const a = document.createElement('a');
             a.href = url;
             a.download = filename;
@@ -93,7 +111,7 @@ const StorageManager: React.FC = () => {
             alert('Error creando el backup: ' + (e?.message || 'desconocido'));
         }
     };
-    
+
     // Importar datos desde un archivo JSON
     const triggerImport = () => {
         if (fileInputRef.current) {
@@ -101,7 +119,7 @@ const StorageManager: React.FC = () => {
             fileInputRef.current.click();
         }
     };
-    
+
     const handleFileSelected: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
         const file = e.target.files?.[0];
         if (!file) return;
